@@ -1,3 +1,11 @@
+// Package models contains GORM persistence models for the support service.
+//
+// Deprecated: This package is being migrated to DDD architecture.
+// For new development, use:
+//   - Domain models: github.com/niaga-platform/service-support/internal/domain/ticket
+//   - Persistence: github.com/niaga-platform/service-support/internal/infrastructure/persistence
+//
+// Existing code can continue using this package during the transition period.
 package models
 
 import (

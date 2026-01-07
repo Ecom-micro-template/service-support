@@ -1,21 +1,14 @@
-// Package models contains GORM persistence models for the support service.
-//
-// Deprecated: This package is being migrated to DDD architecture.
-// For new development, use:
-//   - Domain models: github.com/niaga-platform/service-support/internal/domain/category
-//   - Persistence: github.com/niaga-platform/service-support/internal/infrastructure/persistence
-//
-// Existing code can continue using this package during the transition period.
-package models
+package persistence
 
 import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-// Category represents a support ticket category
-type Category struct {
+// CategoryModel is the GORM persistence model for Category.
+type CategoryModel struct {
 	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	Name        string    `json:"name" gorm:"size:100;not null"`
 	NameMS      string    `json:"name_ms" gorm:"column:name_ms;size:100"`
@@ -28,7 +21,15 @@ type Category struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// TableName specifies the table name for Category
-func (Category) TableName() string {
+// TableName specifies the table name.
+func (CategoryModel) TableName() string {
 	return "support.categories"
+}
+
+// BeforeCreate hook to generate UUID if not provided.
+func (m *CategoryModel) BeforeCreate(tx *gorm.DB) error {
+	if m.ID == uuid.Nil {
+		m.ID = uuid.New()
+	}
+	return nil
 }
