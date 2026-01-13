@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/niaga-platform/service-support/internal/domain/shared"
+	"github.com/Ecom-micro-template/service-support/internal/domain/shared"
 )
 
 // Attachment represents a file attachment.

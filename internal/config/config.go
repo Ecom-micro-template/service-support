@@ -48,7 +48,7 @@ func Load() *Config {
 			Port:     getEnvAsInt("DB_PORT", 5432),
 			User:     getEnv("DB_USER", "postgres"),
 			Password: getEnv("DB_PASSWORD", "postgres"),
-			DBName:   getEnv("DB_NAME", "niaga_platform"),
+			DBName:   getEnv("DB_NAME", "ecommerce_platform"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		NatsURL:     getEnv("NATS_URL", "nats://localhost:4222"),

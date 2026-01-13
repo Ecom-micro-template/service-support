@@ -7,9 +7,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/niaga-platform/service-support/internal/events"
-	"github.com/niaga-platform/service-support/internal/models"
-	"github.com/niaga-platform/service-support/internal/repository"
+	"github.com/Ecom-micro-template/service-support/internal/events"
+	"github.com/Ecom-micro-template/service-support/internal/models"
+	"github.com/Ecom-micro-template/service-support/internal/repository"
 	"go.uber.org/zap"
 )
 
