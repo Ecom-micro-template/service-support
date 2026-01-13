@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/Ecom-micro-template/service-support/internal/events"
-	"github.com/Ecom-micro-template/service-support/internal/models"
-	"github.com/Ecom-micro-template/service-support/internal/repository"
+	"github.com/Ecom-micro-template/service-support/internal/domain"
+	"github.com/Ecom-micro-template/service-support/internal/infrastructure/persistence"
 	"go.uber.org/zap"
 )
 

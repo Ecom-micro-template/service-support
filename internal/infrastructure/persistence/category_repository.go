@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/Ecom-micro-template/service-support/internal/models"
+	"github.com/Ecom-micro-template/service-support/internal/domain"
 	"gorm.io/gorm"
 )
 

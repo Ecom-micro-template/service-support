@@ -18,7 +18,7 @@ import (
 	"github.com/Ecom-micro-template/service-support/internal/config"
 	"github.com/Ecom-micro-template/service-support/internal/events"
 	"github.com/Ecom-micro-template/service-support/internal/handlers"
-	"github.com/Ecom-micro-template/service-support/internal/repository"
+	"github.com/Ecom-micro-template/service-support/internal/infrastructure/persistence"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

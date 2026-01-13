@@ -1,184 +1,310 @@
-package persistence
+package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
-	"github.com/Ecom-micro-template/service-support/internal/domain/shared"
-	"github.com/Ecom-micro-template/service-support/internal/domain/ticket"
+	"github.com/Ecom-micro-template/service-support/internal/domain"
 	"gorm.io/gorm"
 )
 
-// TicketRepository interface for ticket domain.
-type TicketRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID) (*ticket.Ticket, error)
-	GetByNumber(ctx context.Context, number string) (*ticket.Ticket, error)
-	List(ctx context.Context, page, pageSize int, status *string, assignedTo *uuid.UUID) ([]*ticket.Ticket, int64, error)
-	GetOverdue(ctx context.Context) ([]*ticket.Ticket, error)
-	Save(ctx context.Context, t *ticket.Ticket) error
-	Update(ctx context.Context, t *ticket.Ticket) error
-	Delete(ctx context.Context, id uuid.UUID) error
-}
-
-// GormTicketRepository is the GORM implementation of TicketRepository.
-type GormTicketRepository struct {
+// TicketRepository handles database operations for tickets
+type TicketRepository struct {
 	db *gorm.DB
 }
 
-// NewTicketRepository creates a new GormTicketRepository.
-func NewTicketRepository(db *gorm.DB) TicketRepository {
-	return &GormTicketRepository{db: db}
+// NewTicketRepository creates a new ticket repository
+func NewTicketRepository(db *gorm.DB) *TicketRepository {
+	return &TicketRepository{db: db}
 }
 
-// GetByID retrieves a ticket by ID.
-func (r *GormTicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*ticket.Ticket, error) {
-	var model TicketModel
+// TicketFilter represents filters for listing tickets
+type TicketFilter struct {
+	Status      string
+	Priority    string
+	CategoryID  *uuid.UUID
+	CustomerID  *uuid.UUID
+	AssignedTo  *uuid.UUID
+	OrderID     *uuid.UUID
+	Search      string
+	IsOverdue   *bool
+	Page        int
+	PerPage     int
+}
+
+// TicketStats represents ticket statistics
+type TicketStats struct {
+	TotalOpen       int64   `json:"total_open"`
+	TotalPending    int64   `json:"total_pending"`
+	TotalInProgress int64   `json:"total_in_progress"`
+	TotalResolved   int64   `json:"total_resolved"`
+	TotalClosed     int64   `json:"total_closed"`
+	TotalOverdue    int64   `json:"total_overdue"`
+	AvgResponseTime float64 `json:"avg_response_time_hours"`
+	AvgResolutionTime float64 `json:"avg_resolution_time_hours"`
+	SatisfactionRate float64 `json:"satisfaction_rate"`
+}
+
+// Create creates a new ticket
+func (r *TicketRepository) Create(ctx context.Context, ticket *models.Ticket) error {
+	return r.db.WithContext(ctx).Create(ticket).Error
+}
+
+// GetByID retrieves a ticket by ID
+func (r *TicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Ticket, error) {
+	var ticket models.Ticket
 	err := r.db.WithContext(ctx).
-		Preload("Messages").
 		Preload("Category").
-		Where("id = ?", id).First(&model).Error
+		Preload("Messages", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at ASC")
+		}).
+		First(&ticket, "id = ?", id).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, ticket.ErrTicketNotFound
-		}
 		return nil, err
 	}
-	return r.toDomain(&model)
+	return &ticket, nil
 }
 
-// GetByNumber retrieves a ticket by ticket number.
-func (r *GormTicketRepository) GetByNumber(ctx context.Context, number string) (*ticket.Ticket, error) {
-	var model TicketModel
+// GetByTicketNumber retrieves a ticket by ticket number
+func (r *TicketRepository) GetByTicketNumber(ctx context.Context, ticketNumber string) (*models.Ticket, error) {
+	var ticket models.Ticket
 	err := r.db.WithContext(ctx).
-		Preload("Messages").
-		Where("ticket_number = ?", number).First(&model).Error
+		Preload("Category").
+		Preload("Messages", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at ASC")
+		}).
+		First(&ticket, "ticket_number = ?", ticketNumber).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, ticket.ErrTicketNotFound
-		}
 		return nil, err
 	}
-	return r.toDomain(&model)
+	return &ticket, nil
 }
 
-// List retrieves tickets with pagination and filters.
-func (r *GormTicketRepository) List(ctx context.Context, page, pageSize int, status *string, assignedTo *uuid.UUID) ([]*ticket.Ticket, int64, error) {
-	var models []TicketModel
+// List retrieves tickets with filters
+func (r *TicketRepository) List(ctx context.Context, filter TicketFilter) ([]models.Ticket, int64, error) {
+	var tickets []models.Ticket
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&TicketModel{})
-	if status != nil && *status != "" {
-		query = query.Where("status = ?", *status)
+	query := r.db.WithContext(ctx).Model(&models.Ticket{})
+
+	// Apply filters
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
 	}
-	if assignedTo != nil {
-		query = query.Where("assigned_to = ?", *assignedTo)
+	if filter.Priority != "" {
+		query = query.Where("priority = ?", filter.Priority)
 	}
+	if filter.CategoryID != nil {
+		query = query.Where("category_id = ?", filter.CategoryID)
+	}
+	if filter.CustomerID != nil {
+		query = query.Where("customer_id = ?", filter.CustomerID)
+	}
+	if filter.AssignedTo != nil {
+		query = query.Where("assigned_to = ?", filter.AssignedTo)
+	}
+	if filter.OrderID != nil {
+		query = query.Where("order_id = ?", filter.OrderID)
+	}
+	if filter.Search != "" {
+		search := "%" + filter.Search + "%"
+		query = query.Where("subject ILIKE ? OR ticket_number ILIKE ? OR guest_email ILIKE ? OR guest_name ILIKE ?",
+			search, search, search, search)
+	}
+	if filter.IsOverdue != nil && *filter.IsOverdue {
+		query = query.Where("sla_deadline < ? AND status NOT IN ('resolved', 'closed')", time.Now())
+	}
+
+	// Count total
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Pagination
+	if filter.PerPage <= 0 {
+		filter.PerPage = 20
+	}
+	if filter.Page <= 0 {
+		filter.Page = 1
+	}
+	offset := (filter.Page - 1) * filter.PerPage
+
+	// Fetch with preloads
+	err := query.
+		Preload("Category").
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(filter.PerPage).
+		Find(&tickets).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tickets, total, nil
+}
+
+// ListByCustomer retrieves tickets for a specific customer
+func (r *TicketRepository) ListByCustomer(ctx context.Context, customerID uuid.UUID, page, perPage int) ([]models.Ticket, int64, error) {
+	return r.List(ctx, TicketFilter{
+		CustomerID: &customerID,
+		Page:       page,
+		PerPage:    perPage,
+	})
+}
+
+// ListByEmail retrieves tickets for a specific email (for guests)
+func (r *TicketRepository) ListByEmail(ctx context.Context, email string, page, perPage int) ([]models.Ticket, int64, error) {
+	var tickets []models.Ticket
+	var total int64
+
+	query := r.db.WithContext(ctx).Model(&models.Ticket{}).Where("guest_email = ?", email)
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	offset := (page - 1) * pageSize
-	if err := query.Offset(offset).Limit(pageSize).Order("created_at DESC").Find(&models).Error; err != nil {
+	if perPage <= 0 {
+		perPage = 20
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+
+	err := query.
+		Preload("Category").
+		Order("created_at DESC").
+		Offset(offset).
+		Limit(perPage).
+		Find(&tickets).Error
+	if err != nil {
 		return nil, 0, err
 	}
 
-	tickets := make([]*ticket.Ticket, len(models))
-	for i, m := range models {
-		t, err := r.toDomain(&m)
-		if err != nil {
-			return nil, 0, err
-		}
-		tickets[i] = t
-	}
 	return tickets, total, nil
 }
 
-// GetOverdue retrieves overdue tickets.
-func (r *GormTicketRepository) GetOverdue(ctx context.Context) ([]*ticket.Ticket, error) {
-	var models []TicketModel
+// Update updates a ticket
+func (r *TicketRepository) Update(ctx context.Context, ticket *models.Ticket) error {
+	return r.db.WithContext(ctx).Save(ticket).Error
+}
 
-	err := r.db.WithContext(ctx).
-		Where("sla_deadline < NOW()").
-		Where("status NOT IN ?", []string{"resolved", "closed"}).
-		Find(&models).Error
-	if err != nil {
-		return nil, err
-	}
-
-	tickets := make([]*ticket.Ticket, len(models))
-	for i, m := range models {
-		t, err := r.toDomain(&m)
-		if err != nil {
-			return nil, err
+// UpdateStatus updates ticket status and records history
+func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID, newStatus models.TicketStatus, changedBy *uuid.UUID, changedByName, notes string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Get current ticket
+		var ticket models.Ticket
+		if err := tx.First(&ticket, "id = ?", ticketID).Error; err != nil {
+			return err
 		}
-		tickets[i] = t
-	}
-	return tickets, nil
-}
 
-// Save creates a new ticket.
-func (r *GormTicketRepository) Save(ctx context.Context, t *ticket.Ticket) error {
-	model := r.toModel(t)
-	return r.db.WithContext(ctx).Create(model).Error
-}
+		oldStatus := string(ticket.Status)
 
-// Update updates an existing ticket.
-func (r *GormTicketRepository) Update(ctx context.Context, t *ticket.Ticket) error {
-	model := r.toModel(t)
-	return r.db.WithContext(ctx).Save(model).Error
-}
+		// Update ticket status
+		updates := map[string]interface{}{
+			"status":     newStatus,
+			"updated_at": time.Now(),
+		}
 
-// Delete soft-deletes a ticket.
-func (r *GormTicketRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&TicketModel{}, "id = ?", id).Error
-}
+		if newStatus == models.TicketStatusResolved && ticket.ResolvedAt == nil {
+			now := time.Now()
+			updates["resolved_at"] = now
+		}
+		if newStatus == models.TicketStatusClosed && ticket.ClosedAt == nil {
+			now := time.Now()
+			updates["closed_at"] = now
+		}
 
-// toDomain converts model to domain entity.
-func (r *GormTicketRepository) toDomain(m *TicketModel) (*ticket.Ticket, error) {
-	return ticket.NewTicket(ticket.TicketParams{
-		ID:           m.ID,
-		TicketNumber: m.TicketNumber,
-		CustomerID:   m.CustomerID,
-		GuestEmail:   m.GuestEmail,
-		GuestName:    m.GuestName,
-		GuestPhone:   m.GuestPhone,
-		CategoryID:   m.CategoryID,
-		Subject:      m.Subject,
-		Priority:     m.Priority,
-		OrderID:      m.OrderID,
-		OrderNumber:  m.OrderNumber,
-		Tags:         m.Tags,
+		if err := tx.Model(&ticket).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		// Create status history
+		history := &models.StatusHistory{
+			TicketID:      ticketID,
+			FromStatus:    oldStatus,
+			ToStatus:      string(newStatus),
+			ChangedBy:     changedBy,
+			ChangedByName: changedByName,
+			Notes:         notes,
+		}
+
+		return tx.Create(history).Error
 	})
 }
 
-// toModel converts domain entity to model.
-func (r *GormTicketRepository) toModel(t *ticket.Ticket) *TicketModel {
-	status, _ := shared.ParseTicketStatus(string(t.Status()))
-	priority, _ := shared.ParseTicketPriority(string(t.Priority()))
+// Assign assigns a ticket to an agent
+func (r *TicketRepository) Assign(ctx context.Context, ticketID, agentID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Model(&models.Ticket{}).
+		Where("id = ?", ticketID).
+		Update("assigned_to", agentID).Error
+}
 
-	return &TicketModel{
-		ID:                  t.ID(),
-		TicketNumber:        t.TicketNumber().Value(),
-		CustomerID:          t.CustomerID(),
-		GuestEmail:          t.GuestEmail(),
-		GuestName:           t.GuestName(),
-		GuestPhone:          t.GuestPhone(),
-		CategoryID:          t.CategoryID(),
-		Subject:             t.Subject(),
-		Status:              status.String(),
-		Priority:            priority.String(),
-		AssignedTo:          t.AssignedTo(),
-		OrderID:             t.OrderID(),
-		OrderNumber:         t.OrderNumber(),
-		SLADeadline:         t.SLADeadline(),
-		FirstResponseAt:     t.FirstResponseAt(),
-		ResolvedAt:          t.ResolvedAt(),
-		ClosedAt:            t.ClosedAt(),
-		SatisfactionRating:  t.SatisfactionRating(),
-		SatisfactionComment: t.SatisfactionComment(),
-		Tags:                t.Tags(),
-		CreatedAt:           t.CreatedAt(),
-		UpdatedAt:           t.UpdatedAt(),
+// Delete soft deletes a ticket
+func (r *TicketRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&models.Ticket{}, "id = ?", id).Error
+}
+
+// GetStats returns ticket statistics
+func (r *TicketRepository) GetStats(ctx context.Context) (*TicketStats, error) {
+	stats := &TicketStats{}
+
+	// Count by status
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("status = ?", models.TicketStatusOpen).
+		Count(&stats.TotalOpen)
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("status = ?", models.TicketStatusPending).
+		Count(&stats.TotalPending)
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("status = ?", models.TicketStatusInProgress).
+		Count(&stats.TotalInProgress)
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("status = ?", models.TicketStatusResolved).
+		Count(&stats.TotalResolved)
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("status = ?", models.TicketStatusClosed).
+		Count(&stats.TotalClosed)
+
+	// Count overdue
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Where("sla_deadline < ? AND status NOT IN ('resolved', 'closed')", time.Now()).
+		Count(&stats.TotalOverdue)
+
+	// Calculate average response time (hours)
+	var avgResponse struct {
+		Avg float64
 	}
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Select("AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600) as avg").
+		Where("first_response_at IS NOT NULL").
+		Scan(&avgResponse)
+	stats.AvgResponseTime = avgResponse.Avg
+
+	// Calculate average resolution time (hours)
+	var avgResolution struct {
+		Avg float64
+	}
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Select("AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg").
+		Where("resolved_at IS NOT NULL").
+		Scan(&avgResolution)
+	stats.AvgResolutionTime = avgResolution.Avg
+
+	// Calculate satisfaction rate (percentage of 4-5 ratings)
+	var satisfactionData struct {
+		Total   int64
+		Satisfied int64
+	}
+	r.db.WithContext(ctx).Model(&models.Ticket{}).
+		Select("COUNT(*) as total, COUNT(CASE WHEN satisfaction_rating >= 4 THEN 1 END) as satisfied").
+		Where("satisfaction_rating IS NOT NULL").
+		Scan(&satisfactionData)
+	if satisfactionData.Total > 0 {
+		stats.SatisfactionRate = float64(satisfactionData.Satisfied) / float64(satisfactionData.Total) * 100
+	}
+
+	return stats, nil
 }

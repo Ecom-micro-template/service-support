@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/nats-io/nats.go"
-	"github.com/Ecom-micro-template/service-support/internal/models"
+	"github.com/Ecom-micro-template/service-support/internal/domain"
 )
 
 // Event types
