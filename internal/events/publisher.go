@@ -52,7 +52,7 @@ type TicketReplyEvent struct {
 }
 
 // PublishTicketCreated publishes a ticket created event
-func (p *Publisher) PublishTicketCreated(ticket *models.Ticket) error {
+func (p *Publisher) PublishTicketCreated(ticket *domain.Ticket) error {
 	if p.nc == nil {
 		return nil
 	}
@@ -82,7 +82,7 @@ func (p *Publisher) PublishTicketCreated(ticket *models.Ticket) error {
 }
 
 // PublishTicketReply publishes a ticket reply event
-func (p *Publisher) PublishTicketReply(ticket *models.Ticket, message *models.Message, isAgentReply bool) error {
+func (p *Publisher) PublishTicketReply(ticket *domain.Ticket, message *domain.Message, isAgentReply bool) error {
 	if p.nc == nil {
 		return nil
 	}
@@ -111,7 +111,7 @@ func (p *Publisher) PublishTicketReply(ticket *models.Ticket, message *models.Me
 }
 
 // PublishTicketResolved publishes a ticket resolved event
-func (p *Publisher) PublishTicketResolved(ticket *models.Ticket) error {
+func (p *Publisher) PublishTicketResolved(ticket *domain.Ticket) error {
 	if p.nc == nil {
 		return nil
 	}

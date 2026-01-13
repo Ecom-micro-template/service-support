@@ -15,16 +15,16 @@ import (
 
 // TicketHandler handles ticket-related requests
 type TicketHandler struct {
-	ticketRepo  *repository.TicketRepository
-	messageRepo *repository.MessageRepository
+	ticketRepo  *persistence.TicketRepository
+	messageRepo *persistence.MessageRepository
 	publisher   *events.Publisher
 	logger      *zap.Logger
 }
 
 // NewTicketHandler creates a new ticket handler
 func NewTicketHandler(
-	ticketRepo *repository.TicketRepository,
-	messageRepo *repository.MessageRepository,
+	ticketRepo *persistence.TicketRepository,
+	messageRepo *persistence.MessageRepository,
 	logger *zap.Logger,
 ) *TicketHandler {
 	return &TicketHandler{
@@ -92,18 +92,18 @@ func (h *TicketHandler) Create(c *gin.Context) {
 	}
 
 	// Set priority
-	priority := models.TicketPriorityNormal
+	priority := domain.TicketPriorityNormal
 	if req.Priority != "" {
-		priority = models.TicketPriority(req.Priority)
+		priority = domain.TicketPriority(req.Priority)
 	}
 
 	// Create ticket
-	ticket := &models.Ticket{
+	ticket := &domain.Ticket{
 		CustomerID:  &customerID,
 		Subject:     req.Subject,
 		CategoryID:  req.CategoryID,
 		Priority:    priority,
-		Status:      models.TicketStatusOpen,
+		Status:      domain.TicketStatusOpen,
 		OrderID:     req.OrderID,
 		OrderNumber: req.OrderNumber,
 	}
@@ -118,9 +118,9 @@ func (h *TicketHandler) Create(c *gin.Context) {
 	}
 
 	// Create initial message
-	message := &models.Message{
+	message := &domain.Message{
 		TicketID:   ticket.ID,
-		SenderType: models.SenderTypeCustomer,
+		SenderType: domain.SenderTypeCustomer,
 		SenderID:   &customerID,
 		Content:    req.Message,
 	}
@@ -163,14 +163,14 @@ func (h *TicketHandler) SubmitContactForm(c *gin.Context) {
 	}
 
 	// Create ticket for guest
-	ticket := &models.Ticket{
+	ticket := &domain.Ticket{
 		GuestEmail: req.GuestEmail,
 		GuestName:  req.GuestName,
 		GuestPhone: req.GuestPhone,
 		Subject:    req.Subject,
 		CategoryID: req.CategoryID,
-		Priority:   models.TicketPriorityNormal,
-		Status:     models.TicketStatusOpen,
+		Priority:   domain.TicketPriorityNormal,
+		Status:     domain.TicketStatusOpen,
 	}
 
 	if err := h.ticketRepo.Create(c.Request.Context(), ticket); err != nil {
@@ -183,9 +183,9 @@ func (h *TicketHandler) SubmitContactForm(c *gin.Context) {
 	}
 
 	// Create initial message
-	message := &models.Message{
+	message := &domain.Message{
 		TicketID:    ticket.ID,
-		SenderType:  models.SenderTypeCustomer,
+		SenderType:  domain.SenderTypeCustomer,
 		SenderName:  req.GuestName,
 		SenderEmail: req.GuestEmail,
 		Content:     req.Message,
@@ -387,11 +387,11 @@ func (h *TicketHandler) AddMessage(c *gin.Context) {
 	}
 
 	// Determine sender type
-	senderType := models.SenderTypeCustomer
+	senderType := domain.SenderTypeCustomer
 	if ticket.CustomerID != nil && *ticket.CustomerID != senderID {
 		role, _ := c.Get("role")
 		if role == "admin" || role == "super_admin" || role == "support" {
-			senderType = models.SenderTypeAgent
+			senderType = domain.SenderTypeAgent
 		} else {
 			c.JSON(http.StatusForbidden, gin.H{
 				"success": false,
@@ -404,7 +404,7 @@ func (h *TicketHandler) AddMessage(c *gin.Context) {
 	// Convert attachments to JSON
 	attachmentsJSON, _ := json.Marshal(req.Attachments)
 
-	message := &models.Message{
+	message := &domain.Message{
 		TicketID:    id,
 		SenderType:  senderType,
 		SenderID:    &senderID,
@@ -423,7 +423,7 @@ func (h *TicketHandler) AddMessage(c *gin.Context) {
 
 	// Publish event for notification
 	if h.publisher != nil {
-		h.publisher.PublishTicketReply(ticket, message, senderType == models.SenderTypeAgent)
+		h.publisher.PublishTicketReply(ticket, message, senderType == domain.SenderTypeAgent)
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
@@ -468,7 +468,7 @@ func (h *TicketHandler) RateTicket(c *gin.Context) {
 	}
 
 	// Only allow rating for resolved/closed tickets
-	if ticket.Status != models.TicketStatusResolved && ticket.Status != models.TicketStatusClosed {
+	if ticket.Status != domain.TicketStatusResolved && ticket.Status != domain.TicketStatusClosed {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   gin.H{"message": "Can only rate resolved or closed tickets"},

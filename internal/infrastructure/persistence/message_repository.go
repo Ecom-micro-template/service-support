@@ -1,4 +1,4 @@
-package repository
+package persistence
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func NewMessageRepository(db *gorm.DB) *MessageRepository {
 }
 
 // Create creates a new message and updates ticket
-func (r *MessageRepository) Create(ctx context.Context, message *models.Message) error {
+func (r *MessageRepository) Create(ctx context.Context, message *domain.Message) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Create the message
 		if err := tx.Create(message).Error; err != nil {
@@ -33,8 +33,8 @@ func (r *MessageRepository) Create(ctx context.Context, message *models.Message)
 		}
 
 		// If this is the first agent response, record first_response_at
-		if message.SenderType == models.SenderTypeAgent {
-			var ticket models.Ticket
+		if message.SenderType == domain.SenderTypeAgent {
+			var ticket domain.Ticket
 			if err := tx.First(&ticket, "id = ?", message.TicketID).Error; err != nil {
 				return err
 			}
@@ -44,20 +44,20 @@ func (r *MessageRepository) Create(ctx context.Context, message *models.Message)
 			}
 
 			// Update status to in_progress if currently open
-			if ticket.Status == models.TicketStatusOpen {
-				updates["status"] = models.TicketStatusInProgress
+			if ticket.Status == domain.TicketStatusOpen {
+				updates["status"] = domain.TicketStatusInProgress
 			}
 		}
 
-		return tx.Model(&models.Ticket{}).
+		return tx.Model(&domain.Ticket{}).
 			Where("id = ?", message.TicketID).
 			Updates(updates).Error
 	})
 }
 
 // GetByTicketID retrieves all messages for a ticket
-func (r *MessageRepository) GetByTicketID(ctx context.Context, ticketID uuid.UUID, includeInternal bool) ([]models.Message, error) {
-	var messages []models.Message
+func (r *MessageRepository) GetByTicketID(ctx context.Context, ticketID uuid.UUID, includeInternal bool) ([]domain.Message, error) {
+	var messages []domain.Message
 	query := r.db.WithContext(ctx).Where("ticket_id = ?", ticketID)
 
 	if !includeInternal {
@@ -69,8 +69,8 @@ func (r *MessageRepository) GetByTicketID(ctx context.Context, ticketID uuid.UUI
 }
 
 // GetByID retrieves a message by ID
-func (r *MessageRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Message, error) {
-	var message models.Message
+func (r *MessageRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Message, error) {
+	var message domain.Message
 	err := r.db.WithContext(ctx).First(&message, "id = ?", id).Error
 	if err != nil {
 		return nil, err
@@ -82,25 +82,25 @@ func (r *MessageRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.
 func (r *MessageRepository) MarkAsRead(ctx context.Context, id uuid.UUID) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).
-		Model(&models.Message{}).
+		Model(&domain.Message{}).
 		Where("id = ? AND read_at IS NULL", id).
 		Update("read_at", now).Error
 }
 
 // MarkAllAsRead marks all messages in a ticket as read
-func (r *MessageRepository) MarkAllAsRead(ctx context.Context, ticketID uuid.UUID, senderType models.SenderType) error {
+func (r *MessageRepository) MarkAllAsRead(ctx context.Context, ticketID uuid.UUID, senderType domain.SenderType) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).
-		Model(&models.Message{}).
+		Model(&domain.Message{}).
 		Where("ticket_id = ? AND sender_type != ? AND read_at IS NULL", ticketID, senderType).
 		Update("read_at", now).Error
 }
 
 // GetUnreadCount returns count of unread messages for a ticket
-func (r *MessageRepository) GetUnreadCount(ctx context.Context, ticketID uuid.UUID, forSenderType models.SenderType) (int64, error) {
+func (r *MessageRepository) GetUnreadCount(ctx context.Context, ticketID uuid.UUID, forSenderType domain.SenderType) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&models.Message{}).
+		Model(&domain.Message{}).
 		Where("ticket_id = ? AND sender_type != ? AND read_at IS NULL", ticketID, forSenderType).
 		Count(&count).Error
 	return count, err

@@ -81,10 +81,10 @@ func main() {
 	}
 
 	// Initialize repositories
-	ticketRepo := repository.NewTicketRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
-	categoryRepo := repository.NewCategoryRepository(db)
-	cannedResponseRepo := repository.NewCannedResponseRepository(db)
+	ticketRepo := persistence.NewTicketRepository(db)
+	messageRepo := persistence.NewMessageRepository(db)
+	categoryRepo := persistence.NewCategoryRepository(db)
+	cannedResponseRepo := persistence.NewCannedResponseRepository(db)
 
 	// Initialize handlers
 	ticketHandler := handlers.NewTicketHandler(ticketRepo, messageRepo, zapLogger)

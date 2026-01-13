@@ -15,20 +15,20 @@ import (
 
 // AdminHandler handles admin support management requests
 type AdminHandler struct {
-	ticketRepo        *repository.TicketRepository
-	messageRepo       *repository.MessageRepository
-	categoryRepo      *repository.CategoryRepository
-	cannedResponseRepo *repository.CannedResponseRepository
+	ticketRepo        *persistence.TicketRepository
+	messageRepo       *persistence.MessageRepository
+	categoryRepo      *persistence.CategoryRepository
+	cannedResponseRepo *persistence.CannedResponseRepository
 	publisher         *events.Publisher
 	logger            *zap.Logger
 }
 
 // NewAdminHandler creates a new admin handler
 func NewAdminHandler(
-	ticketRepo *repository.TicketRepository,
-	messageRepo *repository.MessageRepository,
-	categoryRepo *repository.CategoryRepository,
-	cannedResponseRepo *repository.CannedResponseRepository,
+	ticketRepo *persistence.TicketRepository,
+	messageRepo *persistence.MessageRepository,
+	categoryRepo *persistence.CategoryRepository,
+	cannedResponseRepo *persistence.CannedResponseRepository,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
@@ -49,7 +49,7 @@ func (h *AdminHandler) SetEventPublisher(publisher *events.Publisher) {
 // GET /api/v1/admin/support/tickets
 func (h *AdminHandler) ListTickets(c *gin.Context) {
 	// Parse filters
-	filter := repository.TicketFilter{
+	filter := persistence.TicketFilter{
 		Status:   c.Query("status"),
 		Priority: c.Query("priority"),
 		Search:   c.Query("search"),
@@ -186,7 +186,7 @@ func (h *AdminHandler) UpdateTicket(c *gin.Context) {
 		err := h.ticketRepo.UpdateStatus(
 			c.Request.Context(),
 			id,
-			models.TicketStatus(req.Status),
+			domain.TicketStatus(req.Status),
 			&adminID,
 			adminName.(string),
 			"",
@@ -194,12 +194,12 @@ func (h *AdminHandler) UpdateTicket(c *gin.Context) {
 		if err != nil {
 			h.logger.Error("Failed to update ticket status", zap.Error(err))
 		}
-		ticket.Status = models.TicketStatus(req.Status)
+		ticket.Status = domain.TicketStatus(req.Status)
 	}
 
 	// Update other fields
 	if req.Priority != "" {
-		ticket.Priority = models.TicketPriority(req.Priority)
+		ticket.Priority = domain.TicketPriority(req.Priority)
 	}
 	if req.CategoryID != nil {
 		ticket.CategoryID = req.CategoryID
@@ -284,9 +284,9 @@ func (h *AdminHandler) ReplyToTicket(c *gin.Context) {
 	// Convert attachments to JSON
 	attachmentsJSON, _ := json.Marshal(req.Attachments)
 
-	message := &models.Message{
+	message := &domain.Message{
 		TicketID:    id,
-		SenderType:  models.SenderTypeAgent,
+		SenderType:  domain.SenderTypeAgent,
 		SenderID:    &adminID,
 		SenderEmail: adminEmail.(string),
 		Content:     req.Content,
@@ -427,7 +427,7 @@ func (h *AdminHandler) CreateCategory(c *gin.Context) {
 		slaHours = req.SLAHours
 	}
 
-	category := &models.Category{
+	category := &domain.Category{
 		Name:        req.Name,
 		NameMS:      req.NameMS,
 		Description: req.Description,
@@ -622,7 +622,7 @@ func (h *AdminHandler) CreateCannedResponse(c *gin.Context) {
 		isActive = *req.IsActive
 	}
 
-	response := &models.CannedResponse{
+	response := &domain.CannedResponse{
 		Title:      req.Title,
 		Content:    req.Content,
 		CategoryID: req.CategoryID,

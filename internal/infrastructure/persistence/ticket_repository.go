@@ -1,4 +1,4 @@
-package repository
+package persistence
 
 import (
 	"context"
@@ -47,13 +47,13 @@ type TicketStats struct {
 }
 
 // Create creates a new ticket
-func (r *TicketRepository) Create(ctx context.Context, ticket *models.Ticket) error {
+func (r *TicketRepository) Create(ctx context.Context, ticket *domain.Ticket) error {
 	return r.db.WithContext(ctx).Create(ticket).Error
 }
 
 // GetByID retrieves a ticket by ID
-func (r *TicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Ticket, error) {
-	var ticket models.Ticket
+func (r *TicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Ticket, error) {
+	var ticket domain.Ticket
 	err := r.db.WithContext(ctx).
 		Preload("Category").
 		Preload("Messages", func(db *gorm.DB) *gorm.DB {
@@ -67,8 +67,8 @@ func (r *TicketRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.T
 }
 
 // GetByTicketNumber retrieves a ticket by ticket number
-func (r *TicketRepository) GetByTicketNumber(ctx context.Context, ticketNumber string) (*models.Ticket, error) {
-	var ticket models.Ticket
+func (r *TicketRepository) GetByTicketNumber(ctx context.Context, ticketNumber string) (*domain.Ticket, error) {
+	var ticket domain.Ticket
 	err := r.db.WithContext(ctx).
 		Preload("Category").
 		Preload("Messages", func(db *gorm.DB) *gorm.DB {
@@ -82,11 +82,11 @@ func (r *TicketRepository) GetByTicketNumber(ctx context.Context, ticketNumber s
 }
 
 // List retrieves tickets with filters
-func (r *TicketRepository) List(ctx context.Context, filter TicketFilter) ([]models.Ticket, int64, error) {
-	var tickets []models.Ticket
+func (r *TicketRepository) List(ctx context.Context, filter TicketFilter) ([]domain.Ticket, int64, error) {
+	var tickets []domain.Ticket
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&models.Ticket{})
+	query := r.db.WithContext(ctx).Model(&domain.Ticket{})
 
 	// Apply filters
 	if filter.Status != "" {
@@ -145,7 +145,7 @@ func (r *TicketRepository) List(ctx context.Context, filter TicketFilter) ([]mod
 }
 
 // ListByCustomer retrieves tickets for a specific customer
-func (r *TicketRepository) ListByCustomer(ctx context.Context, customerID uuid.UUID, page, perPage int) ([]models.Ticket, int64, error) {
+func (r *TicketRepository) ListByCustomer(ctx context.Context, customerID uuid.UUID, page, perPage int) ([]domain.Ticket, int64, error) {
 	return r.List(ctx, TicketFilter{
 		CustomerID: &customerID,
 		Page:       page,
@@ -154,11 +154,11 @@ func (r *TicketRepository) ListByCustomer(ctx context.Context, customerID uuid.U
 }
 
 // ListByEmail retrieves tickets for a specific email (for guests)
-func (r *TicketRepository) ListByEmail(ctx context.Context, email string, page, perPage int) ([]models.Ticket, int64, error) {
-	var tickets []models.Ticket
+func (r *TicketRepository) ListByEmail(ctx context.Context, email string, page, perPage int) ([]domain.Ticket, int64, error) {
+	var tickets []domain.Ticket
 	var total int64
 
-	query := r.db.WithContext(ctx).Model(&models.Ticket{}).Where("guest_email = ?", email)
+	query := r.db.WithContext(ctx).Model(&domain.Ticket{}).Where("guest_email = ?", email)
 
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -186,15 +186,15 @@ func (r *TicketRepository) ListByEmail(ctx context.Context, email string, page, 
 }
 
 // Update updates a ticket
-func (r *TicketRepository) Update(ctx context.Context, ticket *models.Ticket) error {
+func (r *TicketRepository) Update(ctx context.Context, ticket *domain.Ticket) error {
 	return r.db.WithContext(ctx).Save(ticket).Error
 }
 
 // UpdateStatus updates ticket status and records history
-func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID, newStatus models.TicketStatus, changedBy *uuid.UUID, changedByName, notes string) error {
+func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID, newStatus domain.TicketStatus, changedBy *uuid.UUID, changedByName, notes string) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Get current ticket
-		var ticket models.Ticket
+		var ticket domain.Ticket
 		if err := tx.First(&ticket, "id = ?", ticketID).Error; err != nil {
 			return err
 		}
@@ -207,11 +207,11 @@ func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID,
 			"updated_at": time.Now(),
 		}
 
-		if newStatus == models.TicketStatusResolved && ticket.ResolvedAt == nil {
+		if newStatus == domain.TicketStatusResolved && ticket.ResolvedAt == nil {
 			now := time.Now()
 			updates["resolved_at"] = now
 		}
-		if newStatus == models.TicketStatusClosed && ticket.ClosedAt == nil {
+		if newStatus == domain.TicketStatusClosed && ticket.ClosedAt == nil {
 			now := time.Now()
 			updates["closed_at"] = now
 		}
@@ -221,7 +221,7 @@ func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID,
 		}
 
 		// Create status history
-		history := &models.StatusHistory{
+		history := &domain.StatusHistory{
 			TicketID:      ticketID,
 			FromStatus:    oldStatus,
 			ToStatus:      string(newStatus),
@@ -237,14 +237,14 @@ func (r *TicketRepository) UpdateStatus(ctx context.Context, ticketID uuid.UUID,
 // Assign assigns a ticket to an agent
 func (r *TicketRepository) Assign(ctx context.Context, ticketID, agentID uuid.UUID) error {
 	return r.db.WithContext(ctx).
-		Model(&models.Ticket{}).
+		Model(&domain.Ticket{}).
 		Where("id = ?", ticketID).
 		Update("assigned_to", agentID).Error
 }
 
 // Delete soft deletes a ticket
 func (r *TicketRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&models.Ticket{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Delete(&domain.Ticket{}, "id = ?", id).Error
 }
 
 // GetStats returns ticket statistics
@@ -252,24 +252,24 @@ func (r *TicketRepository) GetStats(ctx context.Context) (*TicketStats, error) {
 	stats := &TicketStats{}
 
 	// Count by status
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
-		Where("status = ?", models.TicketStatusOpen).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
+		Where("status = ?", domain.TicketStatusOpen).
 		Count(&stats.TotalOpen)
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
-		Where("status = ?", models.TicketStatusPending).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
+		Where("status = ?", domain.TicketStatusPending).
 		Count(&stats.TotalPending)
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
-		Where("status = ?", models.TicketStatusInProgress).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
+		Where("status = ?", domain.TicketStatusInProgress).
 		Count(&stats.TotalInProgress)
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
-		Where("status = ?", models.TicketStatusResolved).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
+		Where("status = ?", domain.TicketStatusResolved).
 		Count(&stats.TotalResolved)
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
-		Where("status = ?", models.TicketStatusClosed).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
+		Where("status = ?", domain.TicketStatusClosed).
 		Count(&stats.TotalClosed)
 
 	// Count overdue
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
 		Where("sla_deadline < ? AND status NOT IN ('resolved', 'closed')", time.Now()).
 		Count(&stats.TotalOverdue)
 
@@ -277,7 +277,7 @@ func (r *TicketRepository) GetStats(ctx context.Context) (*TicketStats, error) {
 	var avgResponse struct {
 		Avg float64
 	}
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
 		Select("AVG(EXTRACT(EPOCH FROM (first_response_at - created_at)) / 3600) as avg").
 		Where("first_response_at IS NOT NULL").
 		Scan(&avgResponse)
@@ -287,7 +287,7 @@ func (r *TicketRepository) GetStats(ctx context.Context) (*TicketStats, error) {
 	var avgResolution struct {
 		Avg float64
 	}
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
 		Select("AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) as avg").
 		Where("resolved_at IS NOT NULL").
 		Scan(&avgResolution)
@@ -298,7 +298,7 @@ func (r *TicketRepository) GetStats(ctx context.Context) (*TicketStats, error) {
 		Total   int64
 		Satisfied int64
 	}
-	r.db.WithContext(ctx).Model(&models.Ticket{}).
+	r.db.WithContext(ctx).Model(&domain.Ticket{}).
 		Select("COUNT(*) as total, COUNT(CASE WHEN satisfaction_rating >= 4 THEN 1 END) as satisfied").
 		Where("satisfaction_rating IS NOT NULL").
 		Scan(&satisfactionData)

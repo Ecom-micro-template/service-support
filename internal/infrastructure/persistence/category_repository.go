@@ -1,4 +1,4 @@
-package repository
+package persistence
 
 import (
 	"context"
@@ -19,8 +19,8 @@ func NewCategoryRepository(db *gorm.DB) *CategoryRepository {
 }
 
 // List retrieves all active categories
-func (r *CategoryRepository) List(ctx context.Context, onlyActive bool) ([]models.Category, error) {
-	var categories []models.Category
+func (r *CategoryRepository) List(ctx context.Context, onlyActive bool) ([]domain.Category, error) {
+	var categories []domain.Category
 	query := r.db.WithContext(ctx).Order("priority ASC, name ASC")
 
 	if onlyActive {
@@ -32,8 +32,8 @@ func (r *CategoryRepository) List(ctx context.Context, onlyActive bool) ([]model
 }
 
 // GetByID retrieves a category by ID
-func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Category, error) {
-	var category models.Category
+func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Category, error) {
+	var category domain.Category
 	err := r.db.WithContext(ctx).First(&category, "id = ?", id).Error
 	if err != nil {
 		return nil, err
@@ -42,25 +42,25 @@ func (r *CategoryRepository) GetByID(ctx context.Context, id uuid.UUID) (*models
 }
 
 // Create creates a new category
-func (r *CategoryRepository) Create(ctx context.Context, category *models.Category) error {
+func (r *CategoryRepository) Create(ctx context.Context, category *domain.Category) error {
 	return r.db.WithContext(ctx).Create(category).Error
 }
 
 // Update updates a category
-func (r *CategoryRepository) Update(ctx context.Context, category *models.Category) error {
+func (r *CategoryRepository) Update(ctx context.Context, category *domain.Category) error {
 	return r.db.WithContext(ctx).Save(category).Error
 }
 
 // Delete deletes a category
 func (r *CategoryRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	return r.db.WithContext(ctx).Delete(&models.Category{}, "id = ?", id).Error
+	return r.db.WithContext(ctx).Delete(&domain.Category{}, "id = ?", id).Error
 }
 
 // GetTicketCount returns the number of tickets in a category
 func (r *CategoryRepository) GetTicketCount(ctx context.Context, categoryID uuid.UUID) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
-		Model(&models.Ticket{}).
+		Model(&domain.Ticket{}).
 		Where("category_id = ?", categoryID).
 		Count(&count).Error
 	return count, err
